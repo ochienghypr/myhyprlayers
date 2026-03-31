@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import Quickshell.Io
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -26,8 +27,8 @@ import Quickshell.Io
 //    • Right-clicking a wallpaper thumbnail shows a small tray-style popover
 //      with "Set as user icon" option (converts via imagemagick).
 //
-//  Layer: Top layer, surround only the panel (not full-screen).
-//  Backdrop: full-screen blur rectangle anchored to the PanelWindow fill.
+//  Layer: Top layer, explicit width/height so the surface only wraps the popup
+//         (no full-screen stretch → blur only around the panel, not full-width).
 // ═══════════════════════════════════════════════════════════════════════════
 PanelWindow {
     id: ccWin
@@ -38,19 +39,28 @@ PanelWindow {
     property real   _barGapBot:   Config.outerMarginBottom + Config.barHeight + 6
     property real   _sideMargin:  Config.outerMarginSide
 
-    // Anchor to bar edge (top or bottom), left+right for centering
+    // ── Panel sizing — explicit width/height so the layer surface only
+    //    surrounds the popup (no full-screen stretch = no full-width blur).
+    //    The width is clamped between 620 and 940 px; height fills most of the
+    //    available vertical space minus the bar gap.
+    property real _screenH: screen ? screen.height : 900
+    property real _panelW:  Math.min(940, Math.max(620, (screen ? screen.width : 1920) * 0.50))
+    property real _activeGap: _barAtBottom ? _barGapBot : _barGap
+    property real _panelH:  Math.min(_screenH - _activeGap - 24,
+                                     Math.max(500, _screenH * 0.78))
+
+    // Anchor to bar edge (top or bottom) and center horizontally.
+    // We no longer anchor left+right so the layer surface only wraps the popup.
     anchors {
         top:    !_barAtBottom
         bottom:  _barAtBottom
-        left:   true
-        right:  true
     }
     margins {
         top:    _barAtBottom ? 0 : _barGap
         bottom: _barAtBottom ? _barGapBot : 0
-        left:   0
-        right:  0
     }
+    width:  _panelW
+    height: _panelH
 
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Top
@@ -59,30 +69,22 @@ PanelWindow {
     color: "transparent"
     visible: ControlCenterState.visible
 
-    // ── Full-screen backdrop blur ─────────────────────────────────────────
-    // Positioned relative to the PanelWindow (which spans the available strip),
-    // this dims the background. We also extend it beyond bounds via a negative
-    // margin trick to simulate full-screen dimming while keeping the shell layer.
-    Rectangle {
-        anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.48)
-        // Allow click-away on the backdrop only (not the panel)
-        MouseArea {
-            anchors.fill: parent
-            onClicked: ControlCenterState.close()
-            z: -1
+    // ── Dismiss on focus change ──────────────────────────────────────────────
+    // When the user clicks into a real app window, close the control center.
+    // This mirrors the startmenu's dismiss-on-focus pattern.
+    Connections {
+        target: HyprlandFocusedClient
+        function onAddressChanged() {
+            if (HyprlandFocusedClient.address !== "")
+                ControlCenterState.close()
         }
     }
 
     // ── The panel itself ───────────────────────────────────────────────────
     Rectangle {
         id: panel
-        // Centered horizontally; height fills most of the available strip
-        width:  Math.min(920, Math.max(600, parent.width * 0.66))
-        height: Math.min(parent.height - 16, Math.max(500, parent.height * 0.92))
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: 4
+        // Fill the PanelWindow (which is now explicitly sized to wrap the popup)
+        anchors.fill: parent
 
         radius: 20
         color:  Qt.rgba(Theme.cOnSecondary.r, Theme.cOnSecondary.g,
