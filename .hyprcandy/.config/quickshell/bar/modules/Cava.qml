@@ -7,6 +7,8 @@ import ".."
 // Cava visualizer — runs cava directly with a generated per-side config.
 // Bypasses the socket manager for reliability.
 // Non-collapse: uses a hidden sizer Text so width is always reserved.
+// Auto-hide: when Config.cavaAutoHide is true, the module hides itself
+//            when no media is detected and shows again when media plays.
 Item {
     id: root
     property string side: "left"   // "left" or "right"
@@ -16,13 +18,39 @@ Item {
     //  Non-collapse: always reserve full width when transparent-when-inactive.
     //  _sizer uses a placeholder string of cavaWidth first-bar chars so the
     //  island pre-allocates the correct width before cava outputs anything.
-    implicitWidth:  Config.cavaTransparentWhenInactive
-                        ? (_sizer.implicitWidth + Config.modPadH * 2)
-                        : (_active ? (cavaLabel.implicitWidth + Config.modPadH * 2) : 0)
+    //  When auto-hide is active and no media is detected, collapse to 0.
+    implicitWidth: {
+        if (Config.cavaAutoHide && !_mediaActive) return 0
+        return Config.cavaTransparentWhenInactive
+            ? (_sizer.implicitWidth + Config.modPadH * 2)
+            : (_active ? (cavaLabel.implicitWidth + Config.modPadH * 2) : 0)
+    }
     implicitHeight: Config.moduleHeight
+
+    Behavior on implicitWidth { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
 
     property string _text:   ""
     property bool   _active: false
+
+    // ── Media detection for auto-hide ─────────────────────────────────────────
+    //  Watches playerctl status; _mediaActive = true when Playing or Paused.
+    property bool _mediaActive: false
+
+    Process {
+        id: mediaWatchProc
+        command: ["playerctl", "-F", "status"]
+        running: Config.cavaAutoHide
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: function(line) {
+                const s = line.trim()
+                root._mediaActive = (s === "Playing" || s === "Paused")
+            }
+        }
+        onExited: mediaWatchRestart.restart()
+    }
+    Timer { id: mediaWatchRestart; interval: 3000; repeat: false
+        onTriggered: if (Config.cavaAutoHide && !mediaWatchProc.running) mediaWatchProc.running = true }
 
     // ── Direct cava invocation ────────────────────────────────────────────────
     //  Writes a temp config file then runs cava with ascii output.
@@ -62,12 +90,14 @@ Item {
                 if (!t || t.startsWith("[")) return   // skip cava header lines
                 const vals    = t.split(";")
                 const barsStr = Config.cavaEffectiveBars
+                const gap     = Config.cavaBarSpacing > 0 ? " ".repeat(Config.cavaBarSpacing) : ""
                 let   result  = ""
                 let   allZero = true
                 for (let i = 0; i < vals.length; i++) {
                     const v = parseInt(vals[i])
                     if (!isNaN(v)) {
                         if (v > 0) allZero = false
+                        if (result.length > 0 && gap.length > 0) result += gap
                         result += barsStr[Math.min(v, barsStr.length - 1)]
                     }
                 }
@@ -85,9 +115,15 @@ Item {
         id: _sizer
         visible: false
         text: {
-            const b = Config.cavaEffectiveBars
-            const ch = b.length > 0 ? b[0] : " "
-            return ch.repeat(Config.cavaWidth)
+            const b   = Config.cavaEffectiveBars
+            const ch  = b.length > 0 ? b[0] : " "
+            const gap = Config.cavaBarSpacing > 0 ? " ".repeat(Config.cavaBarSpacing) : ""
+            // Build a representative string: each bar char separated by gap chars
+            const n = Config.cavaWidth
+            if (gap.length === 0) return ch.repeat(n)
+            let s = ""
+            for (let i = 0; i < n; i++) { if (i > 0) s += gap; s += ch }
+            return s
         }
         font.family:    Config.fontFamily
         font.pixelSize: Config.glyphSize

@@ -1,8 +1,8 @@
 pragma ComponentBehavior: Bound
-
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import Qt.labs.settings 1.1
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -44,7 +44,7 @@ PanelWindow {
     //    The width is clamped between 620 and 940 px; height fills most of the
     //    available vertical space minus the bar gap.
     property real _screenH: screen ? screen.height : 900
-    property real _panelW:  Math.min(940, Math.max(620, (screen ? screen.width : 1920) * 0.50))
+    property real _panelW:  Math.min(1060, Math.max(700, (screen ? screen.width : 1920) * 0.62))
     property real _activeGap: _barAtBottom ? _barGapBot : _barGap
     property real _panelH:  Math.min(_screenH - _activeGap - 24,
                                      Math.max(500, _screenH * 0.78))
@@ -92,7 +92,7 @@ PanelWindow {
         border.width: 1
         border.color: Qt.rgba(Theme.cOutVar.r, Theme.cOutVar.g,
                               Theme.cOutVar.b, 0.38)
-        clip: true
+        clip: false
 
         // Scale-in animation from bar direction
         scale: ControlCenterState.visible ? 1.0 : 0.94
@@ -112,10 +112,16 @@ PanelWindow {
             }
         }
 
+         // Inner clip layer — clips content to panel radius without causing blur bleed
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            clip: true
+            color: "transparent"
+
         Row {
             anchors.fill: parent
             spacing: 0
-
             // ═══════════════════════════════════════════════════════════════
             //  LEFT SIDEBAR
             // ═══════════════════════════════════════════════════════════════
@@ -586,7 +592,8 @@ PanelWindow {
                                         }
 
                                         CCSection { text: "Width & Behavior" }
-                                        CCSlider { label:"Cava Width";         from:5;to:60;  value:Config.cavaWidth; onMoved:function(v){Config.cavaWidth=v} }
+                                        CCSlider { label:"Bar Count";          from:5;to:80;stepSize:1; value:Config.cavaWidth;      onMoved:function(v){Config.cavaWidth=v} }
+                                        CCSlider { label:"Bar Spacing";        from:0;to:4; stepSize:1; value:Config.cavaBarSpacing; onMoved:function(v){Config.cavaBarSpacing=v} }
                                         CCToggle { label:"Transparent Inactive"; value:Config.cavaTransparentWhenInactive; onToggled:function(v){Config.cavaTransparentWhenInactive=v} }
                                         CCSlider { label:"Active Opacity";  from:0;to:1;stepSize:0.05;decimals:2; value:Config.cavaActiveOpacity;  onMoved:function(v){Config.cavaActiveOpacity=v} }
                                         CCSlider { label:"Inactive Opacity";from:0;to:1;stepSize:0.05;decimals:2; value:Config.cavaInactiveOpacity;onMoved:function(v){Config.cavaInactiveOpacity=v} }
@@ -620,6 +627,7 @@ PanelWindow {
                                         CCSlider { label:"Ungrouped";     from:-1;to:1;stepSize:0.05;decimals:2; value:Config.ungroupedBgOpacity;    onMoved:function(v){Config.ungroupedBgOpacity=v} }
                                         CCSlider { label:"Media";         from:-1;to:1;stepSize:0.05;decimals:2; value:Config.mediaBgOpacity;        onMoved:function(v){Config.mediaBgOpacity=v} }
                                         CCSlider { label:"Cava";          from:-1;to:1;stepSize:0.05;decimals:2; value:Config.cavaBgOpacity;         onMoved:function(v){Config.cavaBgOpacity=v} }
+                                        CCSlider { label:"Distro";        from:-1;to:1;stepSize:0.05;decimals:2; value:Config.distroBgOpacity;       onMoved:function(v){Config.distroBgOpacity=v} }
                                         CCSlider { label:"Active Window"; from:-1;to:1;stepSize:0.05;decimals:2; value:Config.activeWindowBgOpacity; onMoved:function(v){Config.activeWindowBgOpacity=v} }
 
                                         CCSection { text: "Active Window" }
@@ -636,6 +644,12 @@ PanelWindow {
 
                                         CCSection { text: "Show / Hide Modules" }
                                         CCToggle { label:"Cava";           value:Config.showCava;           onToggled:function(v){Config.showCava=v} }
+                                        CCToggle {
+                                            label:"Cava Auto-Hide"
+                                            value:Config.cavaAutoHide
+                                            enabled: Config.showCava
+                                            onToggled:function(v){Config.cavaAutoHide=v}
+                                        }
                                         CCToggle { label:"Weather";        value:Config.showWeather;        onToggled:function(v){Config.showWeather=v} }
                                         CCToggle { label:"Battery";        value:Config.showBattery;        onToggled:function(v){Config.showBattery=v} }
                                         CCToggle { label:"Media Player";   value:Config.showMediaPlayer;    onToggled:function(v){Config.showMediaPlayer=v} }
@@ -737,6 +751,69 @@ PanelWindow {
                         ColumnLayout {
                             width: parent.width; spacing: 5
                             CCSection { text: "󰔎 Matugen Themes" }
+                            // Light / Dark mode row — matches candy-utils.js Light/Dark logic
+                            // Light: sets -m light, adjusts GTK/waybar/dock/swaync CSS for light palette
+                            // Dark:  sets -m dark, adjusts GTK/waybar/dock/swaync CSS for dark palette
+                            CCSection { text: "Light / Dark Mode" }
+                            RowLayout { Layout.fillWidth:true; spacing:5
+                                CCPillBtn {
+                                    text:"☀ Light"
+                                    onClicked: {
+                                        _themeLightProc.command = ["bash","-c",
+                                            "wi=\"$HOME/.config/hyprcandy/hooks/wallpaper_integration.sh\"; "+
+                                            "ws=\"$HOME/.config/waybar/style.css\"; "+
+                                            "dk=\"$HOME/.config/nwg-dock-hyprland/style.css\"; "+
+                                            "sn=\"$HOME/.config/swaync/style.css\"; "+
+                                            "g3=\"$HOME/.config/matugen/templates/gtk3.css\"; "+
+                                            "g4=\"$HOME/.config/matugen/templates/gtk4.css\"; "+
+                                            "sed -i 's/-m dark/-m light/g' \"$wi\"; "+
+                                            "sed -i 's/@define-color dialog_bg_color .*;/@define-color dialog_bg_color @primary_fixed_dim;/' \"$g3\"; "+
+                                            "sed -i 's/@define-color dialog_fg_color .*;/@define-color dialog_fg_color @inverse_primary;/' \"$g3\"; "+
+                                            "sed -i 's/@define-color dialog_bg_color .*;/@define-color dialog_bg_color @primary_fixed_dim;/' \"$g4\"; "+
+                                            "sed -i 's/@define-color dialog_fg_color .*;/@define-color dialog_fg_color @inverse_primary;/' \"$g4\"; "+
+                                            "sed -i 's/color: @primary_fixed_dim;/color: @primary;/g' \"$ws\"; "+
+                                            "sed -i 's/@inverse_primary, @scrim/@inverse_primary, @primary_fixed_dim/g' \"$ws\"; "+
+                                            "sed -i '8s/@primary_fixed_dim;/@inverse_primary;/g' \"$dk\"; "+
+                                            "sed -i '60s/@background;/@buttoncolor;/g; 68s/@bordercolor;/@background;/g' \"$sn\"; "+
+                                            "sed -i 's/@inverse_primary 0%, @slider 100%,/@primary_fixed_dim 0%, @inverse_primary 100%,/g' \"$sn\"; "+
+                                            "sed -i '59s/color: .*;/color: @primary_fixed_dim;/g;' \"$ws\"; "+
+                                            "bash \"$wi\""
+                                        ]
+                                        _themeLightProc.running = true
+                                    }
+                                }
+                                CCPillBtn {
+                                    text:"🌙 Dark"
+                                    onClicked: {
+                                        _themeDarkProc.command = ["bash","-c",
+                                            "wi=\"$HOME/.config/hyprcandy/hooks/wallpaper_integration.sh\"; "+
+                                            "ws=\"$HOME/.config/waybar/style.css\"; "+
+                                            "dk=\"$HOME/.config/nwg-dock-hyprland/style.css\"; "+
+                                            "sn=\"$HOME/.config/swaync/style.css\"; "+
+                                            "g3=\"$HOME/.config/matugen/templates/gtk3.css\"; "+
+                                            "g4=\"$HOME/.config/matugen/templates/gtk4.css\"; "+
+                                            "sed -i 's/-m light/-m dark/g' \"$wi\"; "+
+                                            "sed -i 's/@on_secondary/@on_primary_fixed_variant/g' \"$g3\"; "+
+                                            "sed -i 's/@define-color dialog_bg_color .*;/@define-color dialog_bg_color @on_primary_fixed_variant;/' \"$g3\"; "+
+                                            "sed -i 's/@define-color dialog_fg_color .*;/@define-color dialog_fg_color @primary;/' \"$g3\"; "+
+                                            "sed -i 's/@on_secondary/@on_primary_fixed_variant/g' \"$g4\"; "+
+                                            "sed -i 's/@define-color dialog_bg_color .*;/@define-color dialog_bg_color @on_primary_fixed_variant;/' \"$g4\"; "+
+                                            "sed -i 's/@define-color dialog_fg_color .*;/@define-color dialog_fg_color @primary;/' \"$g4\"; "+
+                                            "sed -i 's/color: @primary;/color: @primary_fixed_dim;/g' \"$ws\"; "+
+                                            "sed -i 's/@inverse_primary, @primary_fixed_dim/@inverse_primary, @scrim/g' \"$ws\"; "+
+                                            "sed -i '8s/@primary_fixed_dim;/@inverse_primary;/g' \"$dk\"; "+
+                                            "sed -i '60s/@buttoncolor;/@background;/g; 68s/@background;/@bordercolor;/g' \"$sn\"; "+
+                                            "sed -i 's/@primary_fixed_dim 0%, @inverse_primary 100%,/@inverse_primary 0%, @slider 100%,/g' \"$sn\"; "+
+                                            "sed -i '59s/color: .*;/color: @secondary_container;/g;' \"$ws\"; "+
+                                            "bash \"$wi\""
+                                        ]
+                                        _themeDarkProc.running = true
+                                    }
+                                }
+                            }
+                            Process { id:_themeLightProc; running:false }
+                            Process { id:_themeDarkProc;  running:false }
+                            CCSection { text: "Scheme" }
                             Flow { Layout.fillWidth: true; spacing: 5
                                 Repeater {
                                     model: [
@@ -801,6 +878,19 @@ PanelWindow {
                                 }
                             }
                             Process { id:_dockIcon; running:false }
+                            CCEntryRow {
+                                label:"Start Icon"
+                                onApplied: function(val) {
+                                    if (val) {
+                                        _dockStartIcon.command=["bash","-c",
+                                            "f=\"$HOME/.hyprcandy/GJS/hyprcandydock/config.js\"; "+
+                                            "sed -i \"s/startIcon: .*/startIcon: '"+val+"',/\" \"$f\" && "+
+                                            "pkill -SIGUSR2 -f 'gjs dock-main.js'"]
+                                        _dockStartIcon.running=true
+                                    }
+                                }
+                            }
+                            Process { id:_dockStartIcon; running:false }
                             Item { height:10 }
                         }
                     }
@@ -842,18 +932,19 @@ PanelWindow {
                         }
                     }
                 }
+                }
             }
         }
+        } // end inner clip Rectangle
     }
-
-    // ═══════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     //  Wallpaper Picker Overlay
     //  Opens ABOVE the control center when the user icon is clicked.
-    //  Grid of thumbnails; right-click any thumbnail → "Set as user icon" popover.
+    //  Left sidebar for directory navigation; ImageMagick thumbnails;
+    //  single-click any image to set as user icon.
     // ═══════════════════════════════════════════════════════════════════════
     Rectangle {
         id: wpPickerOverlay
-
         // Positioned to cover the control center panel area; sits above it via z-order
         anchors.fill: panel
         z: 10
@@ -864,282 +955,536 @@ PanelWindow {
         border.width: 1
         border.color: Qt.rgba(Theme.cOutVar.r, Theme.cOutVar.g, Theme.cOutVar.b, 0.40)
         clip: true
-
         scale: visible ? 1.0 : 0.94
         transformOrigin: Item.Top
         opacity: visible ? 1.0 : 0.0
         Behavior on scale   { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
         Behavior on opacity { NumberAnimation { duration: 140 } }
 
-        function open()  { visible = true; wpScanProc.running = true }
-        function close() { visible = false; wpContextMenu.visible = false }
+        function open() {
+            visible = true
+            if (wpSettings.wallpaperDir) {
+                _wpSidebarPath = _parentOf(wpSettings.wallpaperDir)
+                _wpCurrentDir  = wpSettings.wallpaperDir
+                _wpDoScan()
+            } else {
+                _wpSidebarPath = Quickshell.env("HOME") + "/Pictures"
+                _wpCurrentDir  = ""
+            }
+            if (_wpSidebarOpen) _wpScanSidebarDirs(_wpSidebarPath)
+        }
+        function close() { visible = false }
 
-        // State
-        property var _wallpapers: []
-        property string _contextTarget: ""
-        property int    _ctxX: 0
-        property int    _ctxY: 0
+        function _parentOf(p) {
+            if (!p) return Quickshell.env("HOME")
+            const s = p.endsWith("/") ? p.slice(0, -1) : p
+            const idx = s.lastIndexOf("/")
+            return idx > 0 ? s.substring(0, idx) : "/"
+        }
+        function _pathHash(p) {
+            let h = 5381
+            for (let i = 0; i < p.length; i++)
+                h = ((h << 5) + h + p.charCodeAt(i)) >>> 0
+            return ('00000000' + h.toString(16)).slice(-8)
+        }
 
-        // Scan wallpaper directory
+        // ── State ─────────────────────────────────────────────────────────────
+        property var    _wallpapers:    []
+        property bool   _wpSidebarOpen: false
+        property string _wpSidebarPath: Quickshell.env("HOME") + "/Pictures"
+        property var    _wpSidebarDirs: []
+        property string _wpCurrentDir:  ""
+        // Thumb pipeline
+        signal thumbReady(string origPath, string thumbSrc)
+        property var  _thumbQueue:   []
+        property bool _thumbRunning: false
+
+        // ── Settings persistence ──────────────────────────────────────────────
+        Settings {
+            id: wpSettings
+            category: "cc-wp-picker-v1"
+            property string wallpaperDir: ""
+        }
+
+        // ── Directory scan ────────────────────────────────────────────────────
+        function _wpDoScan() {
+            if (!_wpCurrentDir) return
+            wpSettings.wallpaperDir = _wpCurrentDir
+            _wallpapers = []
+            _thumbQueue = []
+            _thumbRunning = false
+            if (wpScanProc.running) wpScanProc.running = false
+            Qt.callLater(function() { wpScanProc.running = true })
+        }
+
         Process {
             id: wpScanProc
-            command: ["bash", "-c",
-                "find \"${HOME}/Pictures/Wallpapers\" -maxdepth 2 " +
-                "\\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \\) " +
-                "2>/dev/null | sort | head -80"]
-            running: false
+            property var _buf: []
+            command: wpPickerOverlay._wpCurrentDir ? [
+                "bash", "-c",
+                "find \"$1\" -maxdepth 1 -type f " +
+                "\\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' " +
+                "-o -iname '*.webp' -o -iname '*.gif' -o -iname '*.bmp' \\) -print | sort",
+                "--", wpPickerOverlay._wpCurrentDir
+            ] : ["bash", "-c", "exit 0"]
             stdout: SplitParser {
                 splitMarker: "\n"
                 onRead: function(l) {
-                    if (l.trim()) {
-                        const w = wpPickerOverlay._wallpapers
-                        w.push(l.trim())
-                        wpPickerOverlay._wallpapers = w.slice()
-                    }
+                    const t = l.trim()
+                    if (t) wpScanProc._buf.push(t)
                 }
             }
-            onRunningChanged: {
-                if (running) wpPickerOverlay._wallpapers = []
+            onRunningChanged: if (running) _buf = []
+            onExited: function() {
+                wpPickerOverlay._wallpapers = _buf.slice()
+                Qt.callLater(wpPickerOverlay._thumbDrain)
             }
         }
 
-        ColumnLayout {
-            anchors { fill: parent; margins: 16 }
-            spacing: 10
+        // ── Sidebar directory listing ─────────────────────────────────────────
+        function _wpScanSidebarDirs(path) {
+            wpSidebarProc._path = path
+            if (wpSidebarProc.running) wpSidebarProc.running = false
+            Qt.callLater(function() { wpSidebarProc.running = true })
+        }
+        onWpSidebarOpenChanged: {
+            if (_wpSidebarOpen) _wpScanSidebarDirs(_wpSidebarPath)
+        }
 
-            // Header
-            RowLayout {
-                Layout.fillWidth: true
-                Text {
-                    text: "󰸉  Select Wallpaper / User Icon"
-                    color: Theme.cPrimary
-                    font.family: Config.labelFont; font.pixelSize: 15
-                    font.weight: Font.SemiBold
-                }
-                Item { Layout.fillWidth: true }
-                Text {
-                    text: "Right-click a wallpaper to set as user icon"
-                    color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.5)
-                    font.family: Config.labelFont; font.pixelSize: 11
-                }
-                Item { width: 10 }
-                Rectangle {
-                    width: 28; height: 28; radius: 14
-                    color: wpCloseHov.containsMouse
-                        ? Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.15)
-                        : Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.07)
-                    Text {
-                        anchors.centerIn: parent; text: "󰅙"
-                        font.family: Config.fontFamily; font.pixelSize: 15
-                        color: Theme.cPrimary
-                    }
-                    MouseArea {
-                        id: wpCloseHov; anchors.fill: parent; hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: wpPickerOverlay.close()
-                    }
-                    Behavior on color { ColorAnimation { duration: 120 } }
+        Process {
+            id: wpSidebarProc
+            property string _path: ""
+            property var    _buf:  []
+            command: _path ? [
+                "bash", "-c",
+                "find \"$1\" -maxdepth 1 -mindepth 1 -type d -not -name '.*' -print | sort",
+                "--", _path
+            ] : ["bash", "-c", "exit 0"]
+            stdout: SplitParser {
+                splitMarker: "\n"
+                onRead: function(l) {
+                    const t = l.trim()
+                    if (t) wpSidebarProc._buf.push(t)
                 }
             }
+            onRunningChanged: if (running) _buf = []
+            onExited: function() { wpPickerOverlay._wpSidebarDirs = _buf.slice() }
+        }
 
-            // Separator
-            Rectangle { Layout.fillWidth: true; height: 1; color: Qt.rgba(Theme.cOutVar.r, Theme.cOutVar.g, Theme.cOutVar.b, 0.25) }
+        // ── Thumbnail pipeline (ImageMagick → 160×100 rounded PNG) ───────────
+        function thumbRequest(path) {
+            if (!path) return
+            if (_thumbQueue.indexOf(path) < 0) _thumbQueue.push(path)
+            _thumbDrain()
+        }
+        function _thumbDrain() {
+            if (_thumbRunning || _thumbQueue.length === 0) return
+            const path  = _thumbQueue.shift()
+            const hash  = _pathHash(path)
+            const dst   = "/tmp/qs_cc_thumbs/" + hash + ".png"
+            const safe  = path.replace(/'/g, "'\\''")
+            const safed = dst.replace(/'/g, "'\\''")
+            const isGif  = path.toLowerCase().endsWith(".gif")
+            const srcArg = isGif ? ("'" + safe + "'[0]") : ("'" + safe + "'")
+            _thumbRunning = true
+            wpThumbProc._origPath = path
+            wpThumbProc._dst      = dst
+            wpThumbProc._cmd =
+                "mkdir -p /tmp/qs_cc_thumbs; " +
+                "[ -f '" + safed + "' ] && { echo ok; exit 0; }; " +
+                "magick " + srcArg + " " +
+                "-resize 160x100^ -gravity center -extent 160x100 " +
+                "\\( +clone -alpha extract " +
+                "   -fill black -colorize 100 " +
+                "   -fill white -draw 'roundrectangle 0,0 159,99 14,14' \\) " +
+                "-alpha off -compose CopyOpacity -composite " +
+                "-strip '" + safed + "' 2>/dev/null && echo ok"
+            wpThumbProc.running = true
+        }
 
-            // Thumbnail grid
-            Flickable {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                contentWidth: width
-                contentHeight: wpGrid.implicitHeight + 12
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                // Invisible scrollbar
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AsNeeded
-                    contentItem: Rectangle {
-                        implicitWidth: 0; radius: 0
-                        color: "transparent"
+        Process {
+            id: wpThumbProc
+            property string _origPath: ""
+            property string _dst:      ""
+            property string _cmd:      "true"
+            command: ["bash", "-c", wpThumbProc._cmd]
+            onExited: function(code) {
+                if (code === 0)
+                    wpPickerOverlay.thumbReady(wpThumbProc._origPath,
+                        "file://" + wpThumbProc._dst + "?" + Date.now())
+                wpPickerOverlay._thumbRunning = false
+                wpPickerOverlay._thumbDrain()
+            }
+        }
+
+        // ── Sidebar overlay (left-slide) ──────────────────────────────────────
+        Rectangle {
+            id: wpSidebar
+            anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
+            width:  wpPickerOverlay._wpSidebarOpen ? 240 : 0
+            radius: 20; clip: true
+            color:  Qt.rgba(Theme.cBackground.r, Theme.cBackground.g, Theme.cBackground.b, 0.97)
+            z: 20
+            Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+            ColumnLayout {
+                anchors { fill: parent; margins: 10 }
+                spacing: 5
+                visible: wpPickerOverlay._wpSidebarOpen
+
+                // Current path + up button
+                Rectangle {
+                    Layout.fillWidth: true; height: 34; radius: 10
+                    color: Qt.rgba(Theme.cSurfHi.r, Theme.cSurfHi.g,
+                                   Theme.cSurfHi.b, 0.6)
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 6 }
+                        spacing: 5
+                        Text {
+                            text: "󰁞"; color: Theme.cPrimary
+                            font.pixelSize: 14; font.family: Config.fontFamily
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    const up = wpPickerOverlay._parentOf(wpPickerOverlay._wpSidebarPath)
+                                    wpPickerOverlay._wpSidebarPath = up
+                                    wpPickerOverlay._wpScanSidebarDirs(up)
+                                }
+                            }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: wpPickerOverlay._wpSidebarPath.split('/').pop() || "/"
+                            color: Theme.cOnSurf; font.pixelSize: 12
+                            font.family: Config.labelFont; elide: Text.ElideRight
+                        }
                     }
-                    background: Rectangle { color: "transparent" }
                 }
 
-                Grid {
-                    id: wpGrid
-                    width: parent.width
-                    columns: Math.max(2, Math.floor(parent.width / 160))
-                    spacing: 8
-                    anchors { left: parent.left; top: parent.top; topMargin: 6 }
-
-                    Repeater {
-                        model: wpPickerOverlay._wallpapers
-                        delegate: Item {
-                            required property string modelData
-                            required property int index
-                            width:  (wpGrid.width - wpGrid.spacing * (wpGrid.columns - 1)) / wpGrid.columns
-                            height: width * 0.56
-
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: 10
-                                color: Qt.rgba(Theme.cInversePrimary.r, Theme.cInversePrimary.g,
-                                               Theme.cInversePrimary.b, 0.18)
-                                border.width: wpThumbHov.containsMouse ? 2 : 1
-                                border.color: wpThumbHov.containsMouse
-                                    ? Theme.cPrimary
-                                    : Qt.rgba(Theme.cOutVar.r, Theme.cOutVar.g, Theme.cOutVar.b, 0.28)
-                                clip: true
-
-                                Image {
-                                    anchors.fill: parent
-                                    anchors.margins: 0
-                                    source: "file://" + parent.parent.modelData
-                                    fillMode: Image.PreserveAspectCrop
-                                    smooth: true; mipmap: true; asynchronous: true
+                // Directory list
+                Flickable {
+                    Layout.fillWidth: true; Layout.fillHeight: true
+                    contentHeight: wpSidebarCol.implicitHeight
+                    clip: true; boundsBehavior: Flickable.StopAtBounds
+                    Column {
+                        id: wpSidebarCol
+                        width: parent.width; spacing: 2
+                        Repeater {
+                            model: wpPickerOverlay._wpSidebarDirs
+                            delegate: Rectangle {
+                                required property string modelData
+                                width: wpSidebarCol.width; height: 30; radius: 8
+                                color: dirHov.containsMouse
+                                    ? Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.18)
+                                    : "transparent"
+                                Behavior on color { ColorAnimation { duration: 100 } }
+                                RowLayout {
+                                    anchors { fill: parent; leftMargin: 8; rightMargin: 6 }
+                                    spacing: 5
+                                    Text {
+                                        text: "󰉋"; color: Theme.cPrimary
+                                        font.pixelSize: 13; font.family: Config.fontFamily
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.split('/').pop()
+                                        color: Theme.cOnSurf; font.pixelSize: 12
+                                        font.family: Config.labelFont; elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        text: "󰁔"; color: Theme.cOnSurfVar
+                                        font.pixelSize: 12; font.family: Config.fontFamily
+                                    }
                                 }
-
-                                // Loading placeholder
-                                Text {
-                                    anchors.centerIn: parent
-                                    visible: parent.children[1].status !== Image.Ready
-                                    text: "󰋩"
-                                    font.family: Config.fontFamily; font.pixelSize: 24
-                                    color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.3)
-                                }
-
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
-                            }
-
-                            MouseArea {
-                                id: wpThumbHov
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                onClicked: function(mouse) {
-                                    if (mouse.button === Qt.LeftButton) {
-                                        // Apply as wallpaper
-                                        _wpApply.command = ["bash", "-c",
-                                            "exec \"${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/wallpaper/wallpaper-apply.sh\" \"" +
-                                            parent.modelData + "\""]
-                                        _wpApply.running = true
-                                        wpPickerOverlay.close()
-                                    } else {
-                                        // Show context menu
-                                        wpPickerOverlay._contextTarget = parent.modelData
-                                        const mapped = parent.mapToItem(wpPickerOverlay, mouse.x, mouse.y)
-                                        wpPickerOverlay._ctxX = mapped.x
-                                        wpPickerOverlay._ctxY = mapped.y
-                                        wpContextMenu.visible = true
+                                MouseArea {
+                                    id: dirHov; anchors.fill: parent; hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        wpPickerOverlay._wpSidebarPath = modelData
+                                        wpPickerOverlay._wpScanSidebarDirs(modelData)
+                                    }
+                                    onDoubleClicked: {
+                                        wpPickerOverlay._wpCurrentDir = modelData
+                                        wpPickerOverlay._wpDoScan()
+                                        wpPickerOverlay._wpSidebarOpen = false
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+                // "Use this folder" button
+                Rectangle {
+                    Layout.fillWidth: true; height: 32; radius: 10
+                    color: useFolderHov.containsMouse
+                        ? Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.25)
+                        : Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.12)
+                    Behavior on color { ColorAnimation { duration: 100 } }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Use this folder"
+                        color: Theme.cPrimary; font.pixelSize: 12
+                        font.family: Config.labelFont; font.weight: Font.Medium
+                    }
+                    MouseArea {
+                        id: useFolderHov; anchors.fill: parent; hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            wpPickerOverlay._wpCurrentDir = wpPickerOverlay._wpSidebarPath
+                            wpPickerOverlay._wpDoScan()
+                            wpPickerOverlay._wpSidebarOpen = false
+                        }
+                    }
+                }
             }
         }
 
-        // ── Tray-style right-click context menu ──────────────────────────────
-        Rectangle {
-            id: wpContextMenu
-            visible: false
-            x: Math.min(wpPickerOverlay._ctxX, wpPickerOverlay.width  - width  - 8)
-            y: Math.min(wpPickerOverlay._ctxY, wpPickerOverlay.height - height - 8)
-            width: 200; height: ctxCol.implicitHeight + 12
-            z: 20
-            radius: 14
-            color: Qt.rgba(Theme.cOnSecondary.r, Theme.cOnSecondary.g,
-                           Theme.cOnSecondary.b, 0.98)
-            border.width: 1
-            border.color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g,
-                                  Theme.cPrimary.b, 0.25)
+        // ── Main content area (slides right when sidebar opens) ───────────────
+        Item {
+            anchors.fill: parent
+            property real contentLeft: wpPickerOverlay._wpSidebarOpen ? wpSidebar.width : 0
+            Behavior on contentLeft { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
-            // Shadow effect via border glow
-            layer.enabled: true
+            ColumnLayout {
+                anchors {
+                    top: parent.top; bottom: parent.bottom
+                    left: parent.left; right: parent.right
+                    leftMargin: parent.contentLeft + 14
+                    topMargin: 14; bottomMargin: 14; rightMargin: 14
+                }
+                spacing: 8
 
-            // Click-away to close
-            MouseArea {
-                parent: wpPickerOverlay
-                anchors.fill: parent
-                z: 15
-                enabled: wpContextMenu.visible
-                onClicked: wpContextMenu.visible = false
-            }
-
-            Column {
-                id: ctxCol
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 6 }
-                spacing: 0
-
-                // Context header
-                Text {
-                    leftPadding: 10; topPadding: 6; bottomPadding: 4
-                    text: "Wallpaper"
-                    color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.55)
-                    font.family: Config.labelFont; font.pixelSize: 11
+                // Header row
+                RowLayout {
+                    Layout.fillWidth: true; spacing: 8
+                    // Folder toggle
+                    Rectangle {
+                        width: 110; height: 30; radius: 999
+                        color: wpPickerOverlay._wpSidebarOpen
+                            ? Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.18)
+                            : (wpFolderHov.containsMouse
+                                ? Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.12)
+                                : Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.07))
+                        border.color: wpPickerOverlay._wpSidebarOpen ? Theme.cPrimary : "transparent"
+                        border.width: wpPickerOverlay._wpSidebarOpen ? 1 : 0
+                        Behavior on color { ColorAnimation { duration: 130 } }
+                        MouseArea {
+                            id: wpFolderHov; anchors.fill: parent; hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                wpPickerOverlay._wpSidebarOpen = !wpPickerOverlay._wpSidebarOpen
+                                if (wpPickerOverlay._wpSidebarOpen)
+                                    wpPickerOverlay._wpScanSidebarDirs(wpPickerOverlay._wpSidebarPath)
+                            }
+                        }
+                        RowLayout {
+                            anchors.centerIn: parent; spacing: 5
+                            Text {
+                                text: "󰉋"
+                                color: wpPickerOverlay._wpSidebarOpen
+                                    ? Theme.cPrimary
+                                    : Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.7)
+                                font.pixelSize: 13; font.family: Config.fontFamily
+                            }
+                            Text {
+                                text: "Folder"
+                                color: wpPickerOverlay._wpSidebarOpen
+                                    ? Theme.cPrimary
+                                    : Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.7)
+                                font.pixelSize: 12; font.family: Config.labelFont
+                                font.weight: Font.Medium
+                            }
+                        }
+                    }
+                    // Title
+                    Text {
+                        text: "󰸉  Select User Icon"
+                        color: Theme.cPrimary
+                        font.family: Config.labelFont; font.pixelSize: 14
+                        font.weight: Font.SemiBold
+                    }
+                    Item { Layout.fillWidth: true }
+                    // Current dir label
+                    Text {
+                        text: wpPickerOverlay._wpCurrentDir
+                            ? wpPickerOverlay._wpCurrentDir.split('/').pop()
+                            : "No folder selected"
+                        color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.5)
+                        font.family: Config.labelFont; font.pixelSize: 11
+                        elide: Text.ElideLeft; Layout.maximumWidth: 180
+                    }
+                    Item { width: 6 }
+                    // Close button
+                    Rectangle {
+                        width: 26; height: 26; radius: 13
+                        color: wpCloseHov.containsMouse
+                            ? Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.15)
+                            : Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.07)
+                        Text {
+                            anchors.centerIn: parent; text: "󰅙"
+                            font.family: Config.fontFamily; font.pixelSize: 14
+                            color: Theme.cPrimary
+                        }
+                        MouseArea {
+                            id: wpCloseHov; anchors.fill: parent; hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: wpPickerOverlay.close()
+                        }
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                    }
                 }
 
                 // Separator
                 Rectangle {
-                    width: parent.width - 12; height: 1; x: 6
-                    color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.15)
+                    Layout.fillWidth: true; height: 1
+                    color: Qt.rgba(Theme.cOutVar.r, Theme.cOutVar.g, Theme.cOutVar.b, 0.25)
                 }
 
-                // "Set as wallpaper" item
-                Rectangle {
-                    width: parent.width; height: 36; radius: 8
-                    color: ctxWpHov.containsMouse
-                        ? Qt.rgba(Theme.cInversePrimary.r, Theme.cInversePrimary.g,
-                                  Theme.cInversePrimary.b, 0.35)
-                        : "transparent"
-                    Row {
-                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        spacing: 8
-                        Text { text: "󰸉"; font.family: Config.fontFamily; font.pixelSize: 13; color: Theme.cPrimary; anchors.verticalCenter: parent.verticalCenter }
-                        Text { text: "Set as wallpaper"; font.family: Config.labelFont; font.pixelSize: 12; color: Theme.cPrimary; anchors.verticalCenter: parent.verticalCenter }
-                    }
-                    MouseArea {
-                        id: ctxWpHov; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            _wpApply.command = ["bash", "-c",
-                                "exec \"${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/wallpaper/wallpaper-apply.sh\" \"" +
-                                wpPickerOverlay._contextTarget + "\""]
-                            _wpApply.running = true
-                            wpContextMenu.visible = false
-                            wpPickerOverlay.close()
-                        }
-                    }
-                    Behavior on color { ColorAnimation { duration: 100 } }
+                // Hint when no folder selected
+                Text {
+                    visible: wpPickerOverlay._wpCurrentDir === ""
+                    text: "Open  Folder  to choose an image directory, then click any image to set it as your user icon."
+                    color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.55)
+                    font.family: Config.labelFont; font.pixelSize: 12
+                    wrapMode: Text.Wrap; Layout.fillWidth: true
                 }
 
-                // "Set as user icon" item
-                Rectangle {
-                    width: parent.width; height: 36; radius: 8
-                    color: ctxIconHov.containsMouse
-                        ? Qt.rgba(Theme.cInversePrimary.r, Theme.cInversePrimary.g,
-                                  Theme.cInversePrimary.b, 0.35)
-                        : "transparent"
-                    Row {
-                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        spacing: 8
-                        Text { text: "󰀄"; font.family: Config.fontFamily; font.pixelSize: 13; color: Theme.cPrimary; anchors.verticalCenter: parent.verticalCenter }
-                        Text { text: "Set as user icon"; font.family: Config.labelFont; font.pixelSize: 12; color: Theme.cPrimary; anchors.verticalCenter: parent.verticalCenter }
+                // Thumbnail grid
+                Flickable {
+                    Layout.fillWidth: true; Layout.fillHeight: true
+                    contentWidth: width
+                    contentHeight: wpGrid.implicitHeight + 12
+                    clip: true; boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                        contentItem: Rectangle {
+                            implicitWidth: 4; radius: 2
+                            color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.3)
+                        }
+                        background: Rectangle { color: "transparent" }
                     }
-                    MouseArea {
-                        id: ctxIconHov; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            _wpAsIcon.command = ["bash", "-c",
-                                "f=\"" + wpPickerOverlay._contextTarget + "\" && " +
-                                "magick \"$f\" -resize 96x96^ -gravity center -extent 96x96 " +
-                                "  \\( +clone -alpha extract -fill black -colorize 100 " +
-                                "     -fill white -draw 'circle 48,48 48,0' \\) " +
-                                "  -alpha off -compose CopyOpacity -composite -strip " +
-                                "  \"$HOME/.config/hyprcandy/user-icon.png\""]
-                            _wpAsIcon.running = true
-                            wpContextMenu.visible = false
+                    Grid {
+                        id: wpGrid
+                        width: parent.width
+                        columns: Math.max(2, Math.floor(parent.width / 155))
+                        spacing: 7
+                        anchors { left: parent.left; top: parent.top; topMargin: 4 }
+
+                        Repeater {
+                            model: wpPickerOverlay._wallpapers
+                            delegate: Item {
+                                id: wpThumbItem
+                                required property string modelData
+                                required property int    index
+                                width:  (wpGrid.width - wpGrid.spacing * (wpGrid.columns - 1)) / wpGrid.columns
+                                height: width * 0.625
+                                property string thumbSrc: ""
+
+                                Component.onCompleted: wpPickerOverlay.thumbRequest(modelData)
+                                Connections {
+                                    target: wpPickerOverlay
+                                    function onThumbReady(origPath, src) {
+                                        if (origPath === wpThumbItem.modelData)
+                                            wpThumbItem.thumbSrc = src
+                                    }
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent; radius: 10
+                                    color: Qt.rgba(Theme.cInversePrimary.r, Theme.cInversePrimary.g,
+                                                   Theme.cInversePrimary.b, 0.18)
+                                    border.width: wpItemHov.containsMouse ? 2 : 1
+                                    border.color: wpItemHov.containsMouse
+                                        ? Theme.cPrimary
+                                        : Qt.rgba(Theme.cOutVar.r, Theme.cOutVar.g, Theme.cOutVar.b, 0.28)
+                                    clip: true
+                                    Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                                    // Thumbnail from magick cache
+                                    Image {
+                                        anchors.fill: parent
+                                        source: wpThumbItem.thumbSrc
+                                        fillMode: Image.PreserveAspectCrop
+                                        smooth: true; mipmap: true; asynchronous: true
+                                        cache: false
+                                        visible: status === Image.Ready && wpThumbItem.thumbSrc !== ""
+                                    }
+                                    // Placeholder while generating
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        color: Qt.rgba(Theme.cBackground.r, Theme.cBackground.g,
+                                                       Theme.cBackground.b, 0.5)
+                                        visible: parent.children[0].status !== Image.Ready
+                                              || wpThumbItem.thumbSrc === ""
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "󰋩"
+                                            color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g,
+                                                           Theme.cPrimary.b, 0.3)
+                                            font.pixelSize: 22; font.family: Config.fontFamily
+                                        }
+                                    }
+                                    // Filename on hover
+                                    Rectangle {
+                                        anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                                        height: wpItemHov.containsMouse ? 22 : 0
+                                        color: Qt.rgba(0, 0, 0, 0.55); clip: true
+                                        Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                        Text {
+                                            anchors { fill: parent; leftMargin: 6; rightMargin: 6 }
+                                            text: wpThumbItem.modelData.split('/').pop()
+                                            color: "#ffffff"; font.pixelSize: 10
+                                            elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
+                                        }
+                                    }
+                                }
+                                MouseArea {
+                                    id: wpItemHov; anchors.fill: parent; hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        _wpAsIcon.command = ["bash", "-c",
+                                            "f=\"" + wpThumbItem.modelData + "\" && " +
+                                            "magick \"$f\" -resize 96x96^ -gravity center -extent 96x96 " +
+                                            "  \\( +clone -alpha extract -fill black -colorize 100 " +
+                                            "     -fill white -draw 'circle 48,48 48,0' \\) " +
+                                            "  -alpha off -compose CopyOpacity -composite -strip " +
+                                            "  \"$HOME/.config/hyprcandy/user-icon.png\""]
+                                        _wpAsIcon.running = true
+                                        wpPickerOverlay.close()
+                                    }
+                                }
+                            }
                         }
                     }
-                    Behavior on color { ColorAnimation { duration: 100 } }
+
+                    // Empty / loading state
+                    Item {
+                        anchors.fill: parent
+                        visible: wpPickerOverlay._wallpapers.length === 0
+                        Column {
+                            anchors.centerIn: parent; spacing: 10
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: wpScanProc.running ? "󰑪"
+                                    : wpPickerOverlay._wpCurrentDir ? "󰋩" : "󰉋"
+                                color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.35)
+                                font.pixelSize: 44; font.family: Config.fontFamily
+                                RotationAnimator on rotation {
+                                    from: 0; to: 360; duration: 1000; loops: Animation.Infinite
+                                    running: wpScanProc.running
+                                }
+                            }
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: wpScanProc.running ? "Scanning…"
+                                    : wpPickerOverlay._wpCurrentDir ? "No images found"
+                                    : "Open a folder to browse images"
+                                color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g, Theme.cPrimary.b, 0.45)
+                                font.pixelSize: 13; font.family: Config.labelFont
+                            }
+                        }
+                    }
                 }
             }
         }

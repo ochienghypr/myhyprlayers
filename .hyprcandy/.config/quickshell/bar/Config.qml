@@ -247,7 +247,8 @@ QtObject {
     //  TAB 5 · Cava
     // ═══════════════════════════════════════════════════════════════════════
 
-    property int cavaWidth: 25   // display columns
+    property int cavaWidth: 25      // ASCII bar count (number of columns rendered by cava)
+    property int cavaBarSpacing: 0   // gap between each ASCII bar (0 = no gap; 1+ inserts space chars)
 
     //  cavaStyle selects a named preset. Set to "" to use cavaBars directly.
     //  Presets:  "dots" | "bars" | "braille_fill" | "braille_hollow" |
@@ -276,6 +277,10 @@ QtObject {
     property bool cavaTransparentWhenInactive: true
     property real cavaActiveOpacity:   0.85
     property real cavaInactiveOpacity: 0.0
+    // cavaAutoHide: when true and showCava is enabled, cava auto-hides when no
+    //   media is detected and auto-shows when media starts playing.
+    //   When showCava is false, auto-hide is disabled and cava stays hidden.
+    property bool cavaAutoHide: false
 
     // ── Cava color ───────────────────────────────────────────────────────
     //  Single color: cavaGlyphColor
@@ -308,6 +313,9 @@ QtObject {
 
     property color cavaBgColor:   Theme.cOnSecondary
     property real  cavaBgOpacity: -1
+
+    property color distroBgColor:   Theme.cOnSecondary
+    property real  distroBgOpacity: -1   // -1 = global; independent distro/CC-button BG opacity
 
     property color activeWindowBgColor:   Theme.cOnSecondary
     property real  activeWindowBgOpacity: 0
