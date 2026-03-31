@@ -70,10 +70,10 @@ ShellRoot {
             }
         }
 
-        // Workspace icon mode: "dot" | "number" | "custom"
+        // Workspace icon mode: "number" | "icon"
         function setWsIconMode(m: string) { Config.wsIconMode = m }
         function cycleWsIconMode() {
-            const modes = ["dot", "number", "custom"]
+            const modes = ["number", "icon"]
             Config.wsIconMode = modes[(modes.indexOf(Config.wsIconMode) + 1) % modes.length]
         }
 
