@@ -73,7 +73,8 @@ PanelWindow {
     // When the user clicks into a real app window, close the control center.
     // This mirrors the startmenu's dismiss-on-focus pattern.
     Connections {
-        target: HyprlandFocusedClient
+        target: (typeof HyprlandFocusedClient !== "undefined") ? HyprlandFocusedClient : null
+        ignoreUnknownSignals: true
         function onAddressChanged() {
             if (HyprlandFocusedClient.address !== "")
                 ControlCenterState.close()
@@ -88,7 +89,7 @@ PanelWindow {
 
         radius: 20
         color:  Qt.rgba(Theme.cOnSecondary.r, Theme.cOnSecondary.g,
-                        Theme.cOnSecondary.b, 0.94)
+                        Theme.cOnSecondary.b, 0.6)
         border.width: 1
         border.color: Qt.rgba(Theme.cOutVar.r, Theme.cOutVar.g,
                               Theme.cOutVar.b, 0.38)
@@ -171,7 +172,7 @@ PanelWindow {
                                 Image {
                                     id: userImg
                                     anchors.fill: parent
-                                    source: "file://" + Config.home + "/.config/hyprcandy/user-icon.png"
+                                    source: "file://" + Quickshell.env("HOME") + "/.config/hyprcandy/user-icon.png"
                                     fillMode: Image.PreserveAspectCrop
                                     smooth: true
                                     mipmap: true
@@ -550,49 +551,82 @@ PanelWindow {
                                         width: parent.width; spacing: 5
 
                                         CCSection { text: "ASCII Style" }
+                                        // Preview icons row — one per style, wraps to next line
                                         Flow {
                                             Layout.fillWidth: true
-                                            spacing: 5
+                                            spacing: 6
                                             Repeater {
                                                 model: Object.keys(Config.cavaStyleMap)
-                                                delegate: Rectangle {
+                                                delegate: Item {
                                                     required property string modelData
-                                                    implicitWidth: _csLbl.implicitWidth + 22; height: 30; radius: 9
-                                                    color: Config.cavaStyle === modelData
-                                                        ? Qt.rgba(Theme.cInversePrimary.r, Theme.cInversePrimary.g,
-                                                                  Theme.cInversePrimary.b, 0.72)
-                                                        : Qt.rgba(Theme.cInversePrimary.r, Theme.cInversePrimary.g,
-                                                                  Theme.cInversePrimary.b, 0.16)
-                                                    border.width: Config.cavaStyle === modelData ? 1 : 0
-                                                    border.color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g,
-                                                                          Theme.cPrimary.b, 0.5)
-                                                    Row {
-                                                        anchors.centerIn: parent; spacing: 5
-                                                        Text {
-                                                            text: Config.cavaStyleMap[modelData] || ""
-                                                            font.family: Config.fontFamily
-                                                            font.pixelSize: 10; color: Theme.cPrimary
-                                                            anchors.verticalCenter: parent.verticalCenter
+                                                    required property int    index
+                                                    // Fixed width so all cells align uniformly
+                                                    width: 72; height: 52
+
+                                                    Column {
+                                                        anchors.fill: parent
+                                                        spacing: 4
+
+                                                        // ── Preview chars ──────────────────────
+                                                        Rectangle {
+                                                            width: parent.width; height: 28
+                                                            radius: 7
+                                                            color: Config.cavaStyle === modelData
+                                                                ? Qt.rgba(Theme.cInversePrimary.r, Theme.cInversePrimary.g,
+                                                                          Theme.cInversePrimary.b, 0.30)
+                                                                : Qt.rgba(Theme.cInversePrimary.r, Theme.cInversePrimary.g,
+                                                                          Theme.cInversePrimary.b, 0.09)
+                                                            Behavior on color { ColorAnimation { duration: 120 } }
+                                                            Text {
+                                                                anchors.centerIn: parent
+                                                                text: Config.cavaStyleMap[modelData] || ""
+                                                                font.family: Config.fontFamily
+                                                                font.pixelSize: 11
+                                                                color: Config.cavaStyle === modelData
+                                                                    ? Theme.cPrimary
+                                                                    : Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g,
+                                                                              Theme.cPrimary.b, 0.55)
+                                                                Behavior on color { ColorAnimation { duration: 120 } }
+                                                            }
                                                         }
-                                                        Text {
-                                                            id: _csLbl
-                                                            text: modelData; color: Theme.cPrimary
-                                                            font.family: Config.labelFont; font.pixelSize: 12
-                                                            anchors.verticalCenter: parent.verticalCenter
+
+                                                        // ── Style name button ──────────────────
+                                                        Rectangle {
+                                                            width: parent.width; height: 20
+                                                            radius: 6
+                                                            color: Config.cavaStyle === modelData
+                                                                ? Qt.rgba(Theme.cInversePrimary.r, Theme.cInversePrimary.g,
+                                                                          Theme.cInversePrimary.b, 0.72)
+                                                                : Qt.rgba(Theme.cInversePrimary.r, Theme.cInversePrimary.g,
+                                                                          Theme.cInversePrimary.b, 0.16)
+                                                            border.width: Config.cavaStyle === modelData ? 1 : 0
+                                                            border.color: Qt.rgba(Theme.cPrimary.r, Theme.cPrimary.g,
+                                                                                  Theme.cPrimary.b, 0.5)
+                                                            Behavior on color { ColorAnimation { duration: 120 } }
+                                                            Text {
+                                                                anchors.centerIn: parent
+                                                                text: modelData
+                                                                color: Theme.cPrimary
+                                                                font.family: Config.labelFont
+                                                                font.pixelSize: 10
+                                                                elide: Text.ElideRight
+                                                                width: parent.width - 6
+                                                                horizontalAlignment: Text.AlignHCenter
+                                                            }
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: Config.cavaStyle = modelData
+                                                            }
                                                         }
                                                     }
-                                                    MouseArea {
-                                                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                                        onClicked: Config.cavaStyle = modelData
-                                                    }
-                                                    Behavior on color { ColorAnimation { duration: 120 } }
                                                 }
                                             }
                                         }
 
                                         CCSection { text: "Width & Behavior" }
-                                        CCSlider { label:"Bar Count";          from:5;to:80;stepSize:1; value:Config.cavaWidth;      onMoved:function(v){Config.cavaWidth=v} }
-                                        CCSlider { label:"Bar Spacing";        from:0;to:4; stepSize:1; value:Config.cavaBarSpacing; onMoved:function(v){Config.cavaBarSpacing=v} }
+                                        CCSlider { label:"Bar Count";   from:5;to:80;stepSize:1;    value:Config.cavaWidth;      onMoved:function(v){Config.cavaWidth=v} }
+                                        CCSlider { label:"Bar Spacing"; from:0;to:6;stepSize:0.5;decimals:1; value:Config.cavaBarSpacing; onMoved:function(v){Config.cavaBarSpacing=v} }
                                         CCToggle { label:"Transparent Inactive"; value:Config.cavaTransparentWhenInactive; onToggled:function(v){Config.cavaTransparentWhenInactive=v} }
                                         CCSlider { label:"Active Opacity";  from:0;to:1;stepSize:0.05;decimals:2; value:Config.cavaActiveOpacity;  onMoved:function(v){Config.cavaActiveOpacity=v} }
                                         CCSlider { label:"Inactive Opacity";from:0;to:1;stepSize:0.05;decimals:2; value:Config.cavaInactiveOpacity;onMoved:function(v){Config.cavaInactiveOpacity=v} }
@@ -1044,7 +1078,7 @@ PanelWindow {
             if (wpSidebarProc.running) wpSidebarProc.running = false
             Qt.callLater(function() { wpSidebarProc.running = true })
         }
-        onWpSidebarOpenChanged: {
+        on_WpSidebarOpenChanged: {
             if (_wpSidebarOpen) _wpScanSidebarDirs(_wpSidebarPath)
         }
 
@@ -1441,6 +1475,7 @@ PanelWindow {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         _wpAsIcon.command = ["bash", "-c",
+                                            "mkdir -p \"$HOME/.config/hyprcandy\" && " +
                                             "f=\"" + wpThumbItem.modelData + "\" && " +
                                             "magick \"$f\" -resize 96x96^ -gravity center -extent 96x96 " +
                                             "  \\( +clone -alpha extract -fill black -colorize 100 " +
@@ -1503,6 +1538,7 @@ PanelWindow {
     Process {
         id: userIconPicker
         command: ["bash", "-c",
+            "mkdir -p \"$HOME/.config/hyprcandy\" && " +
             "f=$(zenity --file-selection --file-filter='Images | *.png *.jpg *.jpeg *.webp' 2>/dev/null) && " +
             "[ -n \"$f\" ] && " +
             "magick \"$f\" -resize 96x96^ -gravity center -extent 96x96 " +
@@ -1513,7 +1549,7 @@ PanelWindow {
         running: false
         onExited: {
             userImg.source = ""
-            userImg.source = "file://" + Config.home + "/.config/hyprcandy/user-icon.png?" + Date.now()
+            userImg.source = "file://" + Quickshell.env("HOME") + "/.config/hyprcandy/user-icon.png?" + Date.now()
         }
     }
 
@@ -1527,7 +1563,7 @@ PanelWindow {
         running: false
         onExited: {
             userImg.source = ""
-            userImg.source = "file://" + Config.home + "/.config/hyprcandy/user-icon.png?" + Date.now()
+            userImg.source = "file://" + Quickshell.env("HOME") + "/.config/hyprcandy/user-icon.png?" + Date.now()
         }
     }
 

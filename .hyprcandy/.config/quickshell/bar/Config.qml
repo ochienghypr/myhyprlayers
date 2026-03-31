@@ -248,7 +248,7 @@ QtObject {
     // ═══════════════════════════════════════════════════════════════════════
 
     property int cavaWidth: 25      // ASCII bar count (number of columns rendered by cava)
-    property int cavaBarSpacing: 0   // gap between each ASCII bar (0 = no gap; 1+ inserts space chars)
+    property real cavaBarSpacing: 0  // px — letter-spacing between bars (0 = no gap; fine increments)
 
     //  cavaStyle selects a named preset. Set to "" to use cavaBars directly.
     //  Presets:  "dots" | "bars" | "braille_fill" | "braille_hollow" |
