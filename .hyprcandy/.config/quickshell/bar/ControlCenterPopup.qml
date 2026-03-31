@@ -465,9 +465,8 @@ PanelWindow {
                                         CCIconEntry { label:"Empty Dot";      value:Config.wsDotEmpty;      onApplied:function(v){Config.wsDotEmpty=v} }
                                         CCIconEntry { label:"WS Separator";   value:Config.wsSeparatorGlyph;onApplied:function(v){Config.wsSeparatorGlyph=v} }
 
-                                        CCSection { text: "Control Center & Power" }
+                                        CCSection { text: "Control Center" }
                                         CCIconEntry { label:"CC Glyph";    value:Config.ccGlyph;    onApplied:function(v){Config.ccGlyph=v} }
-                                        CCIconEntry { label:"Power Glyph"; value:Config.powerGlyph; onApplied:function(v){Config.powerGlyph=v} }
 
                                         CCSection { text: "Battery" }
                                         CCToggle { label:"Radial Visible"; value:Config.batteryRadialVisible; onToggled:function(v){Config.batteryRadialVisible=v} }
@@ -932,11 +931,9 @@ PanelWindow {
                         }
                     }
                 }
-                }
             }
         }
-        } // end inner clip Rectangle
-    }
+        }
     // ═══════════════════════════════════════════════════════════════
     //  Wallpaper Picker Overlay
     //  Opens ABOVE the control center when the user icon is clicked.
@@ -1964,4 +1961,5 @@ PanelWindow {
             }
         }
     }
+}
 }

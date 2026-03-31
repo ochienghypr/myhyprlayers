@@ -4,12 +4,14 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import ".."
-
 // Active window — icon + truncated title of the focused window.
-// Icon resolution mirrors the working overview/OverviewWindow.qml pattern:
+// Icon resolution:
 //   1. DesktopEntries.heuristicLookup(class) → icon name from .desktop file
 //   2. Quickshell.iconPath(name, fallback) → theme icon path (covers most apps)
 //   3. tray-icon-resolve.py fallback for edge cases
+//
+// Uses Connections to track HyprlandFocusedClient changes instead of readonly
+// property bindings, which avoids the "not defined" warning at init time.
 Item {
     id: root
     Layout.alignment: Qt.AlignVCenter
@@ -18,25 +20,43 @@ Item {
     implicitHeight: Config.moduleHeight
     visible: true
 
-    readonly property string winTitle:    HyprlandFocusedClient.title        ?? ""
-    readonly property string winClass:    HyprlandFocusedClient.class        ?? ""
-    readonly property string initialClass:HyprlandFocusedClient.initialClass ?? ""
-    readonly property string winAddress:  HyprlandFocusedClient.address      ?? ""
-    readonly property bool   _noWindow:   winAddress === ""
+    // ── Focused client state (updated via Connections to avoid init-time errors)
+    property string winTitle:    ""
+    property string winClass:    ""
+    property string initialClass:""
+    property string winAddress:  ""
+    readonly property bool _noWindow: winAddress === ""
 
-    // ── Icon resolution (mirrors OverviewWindow.qml) ─────────────────────
-    // Use the same proven pattern as the working overview widget:
-    //   entry = DesktopEntries.heuristicLookup(class)
-    //   iconPath = Quickshell.iconPath(entry?.icon ?? class, fallback)
+    // Sync on startup
+    Component.onCompleted: _syncClient()
+
+    function _syncClient() {
+        const c = HyprlandFocusedClient
+        winTitle     = c.title        ?? ""
+        winClass     = c.class        ?? ""
+        initialClass = c.initialClass ?? ""
+        winAddress   = c.address      ?? ""
+    }
+
+    Connections {
+        target: HyprlandFocusedClient
+        function onTitleChanged()        { root.winTitle     = HyprlandFocusedClient.title        ?? "" }
+        function onClassChanged()        { root.winClass     = HyprlandFocusedClient.class        ?? "" }
+        function onInitialClassChanged() { root.initialClass = HyprlandFocusedClient.initialClass ?? "" }
+        function onAddressChanged()      { root.winAddress   = HyprlandFocusedClient.address      ?? "" }
+    }
+
+    // ── Icon resolution ───────────────────────────────────────────────────
+    // Use DesktopEntries.heuristicLookup with the window class, then
+    // Quickshell.iconPath for theme lookup.  Falls back to tray-icon-resolve.py.
     readonly property var _entry: DesktopEntries.heuristicLookup(
         winClass !== "" ? winClass : initialClass)
 
-    // Primary icon path — identical to OverviewWindow.qml approach
+    // Primary icon path
     readonly property string _primaryIcon: {
         if (_noWindow) return ""
         const name = _entry?.icon ?? (winClass !== "" ? winClass : initialClass)
         if (!name || name === "") return ""
-        // Pass through absolute / URL paths directly
         if (name.startsWith("/"))        return "file://" + name
         if (name.startsWith("file://"))  return name
         if (name.startsWith("image://")) return name
@@ -46,12 +66,11 @@ Item {
     // Resolved path from tray-icon-resolve.py (fills in when primary misses)
     property string resolvedIcon: ""
 
-    // Final icon source: primary path > resolved fallback > empty
+    // Final icon source: primary > resolved fallback > empty
     readonly property string iconSource: {
         if (_noWindow) return ""
-        if (_primaryIcon !== "") return _primaryIcon
         if (resolvedIcon !== "") return "file://" + resolvedIcon
-        return ""
+        return _primaryIcon  // Image.Error will trigger the resolver if this fails
     }
 
     // Best candidate name for the fallback resolver
@@ -60,7 +79,6 @@ Item {
         return (name || "").trim()
     }
 
-    // Whether the resolver needs to run (primary missed or errored)
     property bool _needsResolve: false
 
     // Fallback resolver — argv[1] mode, same script as SystemTray uses
@@ -86,7 +104,6 @@ Item {
     }
 
     on_LookupKeyChanged: { _needsResolve = false; resolvedIcon = "" }
-    Component.onCompleted: if (_lookupKey !== "") _tryResolve()
 
     // ── Layout ────────────────────────────────────────────────────────────
     Row {
@@ -97,7 +114,8 @@ Item {
         Image {
             id: appIcon
             source: root.iconSource
-            width: 14; height: 14
+            width: Config.glyphSize + 2; height: Config.glyphSize + 2
+            sourceSize: Qt.size(width, height)
             fillMode: Image.PreserveAspectFit
             smooth: true; mipmap: true
             anchors.verticalCenter: parent.verticalCenter
