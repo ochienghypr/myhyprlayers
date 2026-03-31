@@ -1,0 +1,33 @@
+/* ── waybar-mpris thumbnail support ────────────────────────────────────────
+ *
+ * The script writes dynamic art rules to /tmp/waybar-mpris.css.
+ * @import that file at the TOP of your waybar style.css:
+ *
+ *   @import "/tmp/waybar-mpris.css";
+ *
+ * The static rules below handle base styling, paused dimming, and
+ * the stopped/empty state. They live in your main style.css as normal.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+#custom-mpris {
+  background-size:     32px 32px;
+  background-repeat:   no-repeat;
+  background-position: left center;
+  padding-left:        8px;   /* overridden to 38px by dynamic rule when art loads */
+  border-radius:       8px;
+  transition:          background-image 0.3s ease,
+                       padding-left     0.2s ease;
+}
+
+/* dim text slightly when paused */
+#custom-mpris.paused {
+  opacity: 0.75;
+}
+
+/* hide entirely when nothing is playing */
+#custom-mpris.stopped {
+  opacity: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+}
