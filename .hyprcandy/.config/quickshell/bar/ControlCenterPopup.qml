@@ -224,8 +224,8 @@ PanelWindow {
                     // ── Nav buttons ───────────────────────────────────────
                     Repeater {
                         model: [
+                            { icon: "", label: "Hyprland",  idx: 1 },
                             { icon: "󱟛", label: "Bar",       idx: 0 },
-                            { icon: " ", label: "Hyprland",  idx: 1 },
                             { icon: "󰔎", label: "Themes",    idx: 2 },
                             { icon: "󰞒", label: "Dock",      idx: 3 },
                             { icon: "󰮫", label: "Menus",     idx: 4 },
