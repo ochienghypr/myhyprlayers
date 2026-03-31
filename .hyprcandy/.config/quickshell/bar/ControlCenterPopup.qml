@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import Quickshell.Io
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -44,7 +45,8 @@ PanelWindow {
     //    available vertical space minus the bar gap.
     property real _screenH: screen ? screen.height : 900
     property real _panelW:  Math.min(940, Math.max(620, (screen ? screen.width : 1920) * 0.50))
-    property real _panelH:  Math.min(_screenH - _barGap - 24,
+    property real _activeGap: _barAtBottom ? _barGapBot : _barGap
+    property real _panelH:  Math.min(_screenH - _activeGap - 24,
                                      Math.max(500, _screenH * 0.78))
 
     // Anchor to bar edge (top or bottom) and center horizontally.
@@ -67,9 +69,16 @@ PanelWindow {
     color: "transparent"
     visible: ControlCenterState.visible
 
-    // ── Backdrop dim ────────────────────────────────────────────────────────
-    // The layer surface now only wraps the popup, so we don't need a separate
-    // full-screen dim rectangle. Click-away is handled by the panel's backdrop area.
+    // ── Dismiss on focus change ──────────────────────────────────────────────
+    // When the user clicks into a real app window, close the control center.
+    // This mirrors the startmenu's dismiss-on-focus pattern.
+    Connections {
+        target: HyprlandFocusedClient
+        function onAddressChanged() {
+            if (HyprlandFocusedClient.address !== "")
+                ControlCenterState.close()
+        }
+    }
 
     // ── The panel itself ───────────────────────────────────────────────────
     Rectangle {
